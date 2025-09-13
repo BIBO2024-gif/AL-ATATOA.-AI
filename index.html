@@ -1,343 +1,604 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-   <meta name="google-site-verification" content="BbEEMitRl-Ro-nAvZY_kVH8IDI-3xFvepscILKkmhnA" />
-    <title>Al-Atatoa.Ai Chat</title>
+    <meta name="google-site-verification" content="BbEEMitRl-Ro-nAvZY_kVH8IDI-3xFvepscILKkmhnA" />
+    <title>AL-ATAOA EDUCATIONAL AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-      import {
-        getAuth,
-        GoogleAuthProvider,
-        signInWithPopup,
-        signOut,
-        onAuthStateChanged,
-      } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-      import {
-        getFirestore,
-        collection,
-        addDoc,
-        serverTimestamp,
-        query,
-        orderBy,
-        onSnapshot,
-      } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import {
+            getAuth,
+            GoogleAuthProvider,
+            signInWithPopup,
+            signOut,
+            onAuthStateChanged,
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            serverTimestamp,
+            query,
+            orderBy,
+            onSnapshot,
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-      // ✅ Your Firebase config
-      const firebaseConfig = {
-        apiKey: "AIzaSyAijPqA0FfQ59CxD236qkouuoP3Sj3eObw",
-        authDomain: "al-atola.firebaseapp.com",
-        projectId: "al-atola",
-        storageBucket: "al-atola.appspot.com",
-        messagingSenderId: "62678831820",
-        appId: "1:62678831820:web:359fb1175905483c596869",
-        measurementId: "G-8D5F4X80FQ",
-      };
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAijPqA0FfQ59CxD236qkouuoP3Sj3eObw",
+            authDomain: "al-atola.firebaseapp.com",
+            projectId: "al-atola",
+            storageBucket: "al-atola.appspot.com",
+            messagingSenderId: "62678831820",
+            appId: "1:62678831820:web:359fb1175905483c596869",
+            measurementId: "G-8D5F4X80FQ",
+        };
 
-      // Initialize Firebase
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-      const provider = new GoogleAuthProvider();
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
 
-      let userId = null;
+        let userId = null;
+        let currentSlideIndex = 0;
+        let currentExplanationSlides = [];
 
-      // Sign in with Google
-      async function signInWithGoogle() {
-        try {
-          const button = document.getElementById("signin-button");
-          button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
-          button.disabled = true;
-          
-          await signInWithPopup(auth, provider);
-        } catch (error) {
-          console.error(error);
-          document.getElementById("status").innerHTML = `
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              <strong>Sign-in failed:</strong> ${error.message}
-            </div>
-          `;
-          
-          const button = document.getElementById("signin-button");
-          button.innerHTML = '<i class="fab fa-google"></i> Sign in with Google';
-          button.disabled = false;
-        }
-      }
-
-      // Sign out
-      async function signOutUser() {
-        try {
-          const button = document.getElementById("signout-button");
-          button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing out...';
-          button.disabled = true;
-          
-          await signOut(auth);
-        } catch (error) {
-          console.error(error);
-          document.getElementById("status").innerHTML = `
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              <strong>Sign-out error:</strong> ${error.message}
-            </div>
-          `;
-          
-          const button = document.getElementById("signout-button");
-          button.innerHTML = '<i class="fas fa-sign-out-alt"></i> Sign out';
-          button.disabled = false;
-        }
-      }
-
-      // Auth state listener
-      onAuthStateChanged(auth, (user) => {
-        const signinBtn = document.getElementById("signin-button");
-        const signoutBtn = document.getElementById("signout-button");
-        const messageInput = document.getElementById("message-input");
-        const sendButton = document.getElementById("send-button");
-        
-        if (user) {
-          userId = user.uid;
-          document.getElementById("user-id").textContent = user.displayName || user.email;
-          document.getElementById("status").innerHTML = `
-            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-              <p>✅ Signed in as: <strong>${user.displayName}</strong> (${user.email})</p>
-            </div>
-          `;
-          document.getElementById("user-avatar").innerHTML = `
-            <img src="${user.photoURL}" class="rounded-full w-10 h-10 border shadow" />
-          `;
-          
-          // Show signout, hide signin
-          signinBtn.classList.add('hidden');
-          signoutBtn.classList.remove('hidden');
-          
-          // Enable message input
-          messageInput.disabled = false;
-          sendButton.disabled = false;
-          
-          attachFirestoreListener();
-        } else {
-          userId = null;
-          document.getElementById("user-id").textContent = "Not signed in";
-          document.getElementById("status").innerHTML = `
-            <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
-              <p>🚪 You are signed out. Sign in to chat.</p>
-            </div>
-          `;
-          document.getElementById("user-avatar").innerHTML = `
-            <i class="fas fa-user-circle text-3xl text-gray-400"></i>
-          `;
-          
-          // Show signin, hide signout
-          signinBtn.classList.remove('hidden');
-          signoutBtn.classList.add('hidden');
-          
-          // Disable message input
-          messageInput.disabled = true;
-          sendButton.disabled = true;
-          
-          // Clear messages
-          document.getElementById("messages-container").innerHTML = `
-            <div class="flex justify-center items-center h-full text-gray-500 italic">
-              Sign in to start chatting
-            </div>
-          `;
-        }
-      });
-
-      // Firestore chat setup
-      const getCollectionPath = () => "chat_rooms/public/messages";
-
-      const attachFirestoreListener = () => {
-        const q = query(
-          collection(db, getCollectionPath()),
-          orderBy("timestamp")
-        );
-        onSnapshot(q, (querySnapshot) => {
-          const messages = [];
-          querySnapshot.forEach((doc) => {
-            messages.push({ id: doc.id, ...doc.data() });
-          });
-          renderMessages(messages);
-          scrollToBottom();
-        }, (error) => {
-          console.error("Firestore error:", error);
-          document.getElementById("status").innerHTML = `
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              <strong>Connection error:</strong> Could not load messages
-            </div>
-          `;
-        });
-      };
-
-      const renderMessages = (messages) => {
-        const container = document.getElementById("messages-container");
-        container.innerHTML = "";
-        
-        if (messages.length === 0) {
-          container.innerHTML = `
-            <div class="flex justify-center items-center h-full text-gray-500 italic">
-              No messages yet. Start the conversation!
-            </div>
-          `;
-        } else {
-          messages.forEach((message) => {
-            const isUser = message.userId === userId;
-            const messageClass = isUser ? "justify-end" : "justify-start";
-            const messageBg = isUser
-              ? "bg-blue-500 text-white rounded-br-none"
-              : "bg-gray-100 text-gray-800 rounded-bl-none";
-            const senderText = isUser ? "You" : `${message.userName || "Anonymous"}`;
-            const time = message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '';
-
-            const messageHTML = `
-              <div class="flex ${messageClass} mb-4">
-                <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
-                  <div class="${isUser ? 'order-2' : ''}">
-                    ${!isUser ? `
-                      <div class="text-xs text-gray-500 ml-2 mb-1">${senderText}</div>
-                    ` : ''}
-                    <div class="flex ${isUser ? 'flex-row-reverse' : ''} items-end">
-                      <div class="${messageBg} px-4 py-2 rounded-lg ${isUser ? 'ml-2' : 'mr-2'}">
-                        <p class="text-sm">${message.text}</p>
-                      </div>
-                      <div class="text-xs text-gray-500 whitespace-nowrap">${time}</div>
+        // Sign in with Google
+        async function signInWithGoogle() {
+            try {
+                const button = document.getElementById("signin-button");
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
+                button.disabled = true;
+                
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error(error);
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <strong>Sign-in failed:</strong> ${error.message}
                     </div>
-                    ${isUser ? `
-                      <div class="text-xs text-gray-500 mr-2 mt-1 text-right">${senderText}</div>
-                    ` : ''}
-                  </div>
+                `;
+                
+                const button = document.getElementById("signin-button");
+                button.innerHTML = '<i class="fab fa-google"></i> Sign in with Google';
+                button.disabled = false;
+            }
+        }
+
+        // Sign out
+        async function signOutUser() {
+            try {
+                const button = document.getElementById("signout-button");
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing out...';
+                button.disabled = true;
+                
+                await signOut(auth);
+            } catch (error) {
+                console.error(error);
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <strong>Sign-out error:</strong> ${error.message}
+                    </div>
+                `;
+                
+                const button = document.getElementById("signout-button");
+                button.innerHTML = '<i class="fas fa-sign-out-alt"></i> Sign out';
+                button.disabled = false;
+            }
+        }
+
+        // Auth state listener
+        onAuthStateChanged(auth, (user) => {
+            const signinBtn = document.getElementById("signin-button");
+            const signoutBtn = document.getElementById("signout-button");
+            const messageInput = document.getElementById("message-input");
+            const sendButton = document.getElementById("send-button");
+            
+            if (user) {
+                userId = user.uid;
+                document.getElementById("user-id").textContent = user.displayName || user.email;
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                        <p>✅ Signed in as: <strong>${user.displayName}</strong> (${user.email})</p>
+                    </div>
+                `;
+                document.getElementById("user-avatar").innerHTML = `
+                    <img src="${user.photoURL}" class="rounded-full w-10 h-10 border shadow" />
+                `;
+                
+                // Show signout, hide signin
+                signinBtn.classList.add('hidden');
+                signoutBtn.classList.remove('hidden');
+                
+                // Enable message input
+                messageInput.disabled = false;
+                messageInput.placeholder = "Type your message...";
+                sendButton.disabled = false;
+                
+                attachFirestoreListener();
+            } else {
+                userId = null;
+                document.getElementById("user-id").textContent = "Not signed in";
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
+                        <p>🚪 You are signed out. Sign in to save your chat history.</p>
+                    </div>
+                `;
+                document.getElementById("user-avatar").innerHTML = `
+                    <i class="fas fa-user-circle text-3xl text-gray-400"></i>
+                `;
+                
+                // Show signin, hide signout
+                signinBtn.classList.remove('hidden');
+                signoutBtn.classList.add('hidden');
+                
+                // Enable message input even when not signed in
+                messageInput.disabled = false;
+                messageInput.placeholder = "Type your question (no sign-in required)...";
+                sendButton.disabled = false;
+                
+                // Don't clear messages - allow guest usage
+                // Just don't attach Firestore listener for guests
+            }
+        });
+
+        // Firestore chat setup
+        const getCollectionPath = () => "chat_rooms/public/messages";
+
+        const attachFirestoreListener = () => {
+            const q = query(
+                collection(db, getCollectionPath()),
+                orderBy("timestamp")
+            );
+            onSnapshot(q, (querySnapshot) => {
+                const messages = [];
+                querySnapshot.forEach((doc) => {
+                    messages.push({ id: doc.id, ...doc.data() });
+                });
+                renderMessages(messages);
+                scrollToBottom();
+            }, (error) => {
+                console.error("Firestore error:", error);
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <strong>Connection error:</strong> Could not load messages
+                    </div>
+                `;
+            });
+        };
+
+        // AI Response Simulation (Replace with actual API integration)
+        async function getAIResponse(userMessage) {
+            // This is a simulation - replace with actual API call
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    // Simple educational responses based on keywords
+                    const lowerMessage = userMessage.toLowerCase();
+                    
+                    if (lowerMessage.includes("math") || lowerMessage.includes("calculate")) {
+                        resolve({
+                            text: "Mathematics is the study of numbers, shapes, and patterns. Would you like me to explain a specific concept like algebra, geometry, or calculus?",
+                            slides: [
+                                "Mathematics is the science of structure, order, and relation.",
+                                "It evolved from counting, calculation, measurement, and the study of shapes.",
+                                "There are many areas of math including arithmetic, algebra, geometry, and calculus.",
+                                "Math helps us understand patterns and solve problems in many fields."
+                            ]
+                        });
+                    } else if (lowerMessage.includes("science") || lowerMessage.includes("physics") || lowerMessage.includes("chemistry")) {
+                        resolve({
+                            text: "Science is the pursuit and application of knowledge about the natural world. Would you like to learn about a specific branch like physics, chemistry, or biology?",
+                            slides: [
+                                "Science is a systematic enterprise that builds knowledge in the form of testable explanations.",
+                                "The major branches of science are natural sciences, social sciences, and formal sciences.",
+                                "The scientific method involves observation, hypothesis, experimentation, and conclusion.",
+                                "Science has transformed our understanding of the universe and improved our quality of life."
+                            ]
+                        });
+                    } else if (lowerMessage.includes("history") || lowerMessage.includes("historical")) {
+                        resolve({
+                            text: "History is the study of past events, particularly in human affairs. Is there a specific era or event you're interested in?",
+                            slides: [
+                                "History is the study of the past as it is described in written documents.",
+                                "We study history to understand change and how the society we live in came to be.",
+                                "Historians use sources like documents, artifacts, and oral traditions.",
+                                "Understanding history helps us avoid repeating past mistakes."
+                            ]
+                        });
+                    } else {
+                        resolve({
+                            text: "I'm an educational AI designed to help with learning. You can ask me about math, science, history, or any other academic subject!",
+                            slides: [
+                                "I'm here to help you learn!",
+                                "You can ask me questions about various subjects.",
+                                "I'll provide explanations in simple steps.",
+                                "Use the next and back buttons to navigate through explanations."
+                            ]
+                        });
+                    }
+                }, 1000); // Simulate API delay
+            });
+        }
+
+        const renderMessages = (messages) => {
+            const container = document.getElementById("messages-container");
+            container.innerHTML = "";
+            
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="flex justify-center items-center h-full text-gray-500 italic">
+                        No messages yet. Ask me anything!
+                    </div>
+                `;
+            } else {
+                messages.forEach((message) => {
+                    const isUser = message.userId === userId;
+                    const messageClass = isUser ? "justify-end" : "justify-start";
+                    const messageBg = isUser
+                        ? "bg-blue-500 text-white rounded-br-none"
+                        : "bg-gray-100 text-gray-800 rounded-bl-none";
+                    const senderText = isUser ? "You" : `${message.userName || "AI Assistant"}`;
+                    const time = message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '';
+
+                    const messageHTML = `
+                        <div class="flex ${messageClass} mb-4">
+                            <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                                <div class="${isUser ? 'order-2' : ''}">
+                                    ${!isUser ? `
+                                        <div class="text-xs text-gray-500 ml-2 mb-1">${senderText}</div>
+                                    ` : ''}
+                                    <div class="flex ${isUser ? 'flex-row-reverse' : ''} items-end">
+                                        <div class="${messageBg} px-4 py-2 rounded-lg ${isUser ? 'ml-2' : 'mr-2'}">
+                                            <p class="text-sm">${message.text}</p>
+                                        </div>
+                                        <div class="text-xs text-gray-500 whitespace-nowrap">${time}</div>
+                                    </div>
+                                    ${isUser ? `
+                                        <div class="text-xs text-gray-500 mr-2 mt-1 text-right">${senderText}</div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += messageHTML;
+                });
+            }
+        };
+
+        const renderExplanationSlides = () => {
+            const slidesContainer = document.getElementById("explanation-slides");
+            const slideContent = document.getElementById("slide-content");
+            const slideCounter = document.getElementById("slide-counter");
+            
+            if (currentExplanationSlides.length === 0) {
+                slidesContainer.classList.add('hidden');
+                return;
+            }
+            
+            slidesContainer.classList.remove('hidden');
+            slideContent.textContent = currentExplanationSlides[currentSlideIndex];
+            slideCounter.textContent = `${currentSlideIndex + 1}/${currentExplanationSlides.length}`;
+            
+            // Update button states
+            document.getElementById("prev-slide").disabled = currentSlideIndex === 0;
+            document.getElementById("next-slide").disabled = currentSlideIndex === currentExplanationSlides.length - 1;
+        };
+
+        const nextSlide = () => {
+            if (currentSlideIndex < currentExplanationSlides.length - 1) {
+                currentSlideIndex++;
+                renderExplanationSlides();
+            }
+        };
+
+        const prevSlide = () => {
+            if (currentSlideIndex > 0) {
+                currentSlideIndex--;
+                renderExplanationSlides();
+            }
+        };
+
+        const scrollToBottom = () => {
+            const container = document.getElementById("messages-container");
+            container.scrollTop = container.scrollHeight;
+        };
+
+        const handleSendMessage = async () => {
+            const inputElement = document.getElementById("message-input");
+            const input = inputElement.value.trim();
+            if (input === "") return;
+
+            // Add user message to UI immediately
+            const user = auth.currentUser;
+            const tempMessage = {
+                text: input,
+                userId: userId || 'guest',
+                userName: user ? user.displayName || user.email : 'Guest',
+                timestamp: new Date(),
+            };
+            
+            // Show user message immediately
+            const container = document.getElementById("messages-container");
+            const messageHTML = `
+                <div class="flex justify-end mb-4">
+                    <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                        <div class="order-2">
+                            <div class="flex flex-row-reverse items-end">
+                                <div class="bg-blue-500 text-white px-4 py-2 rounded-lg ml-2 rounded-br-none">
+                                    <p class="text-sm">${input}</p>
+                                </div>
+                                <div class="text-xs text-gray-500 whitespace-nowrap">${new Date().toLocaleTimeString()}</div>
+                            </div>
+                            <div class="text-xs text-gray-500 mr-2 mt-1 text-right">${user ? 'You' : 'Guest'}</div>
+                        </div>
+                    </div>
                 </div>
-              </div>
             `;
             container.innerHTML += messageHTML;
-          });
-        }
-      };
-
-      const scrollToBottom = () => {
-        const container = document.getElementById("messages-container");
-        container.scrollTop = container.scrollHeight;
-      };
-
-      const handleSendMessage = async () => {
-        const inputElement = document.getElementById("message-input");
-        const input = inputElement.value.trim();
-        if (input === "" || !userId) return;
-
-        const user = auth.currentUser;
-        const userMessage = {
-          text: input,
-          sender: user.displayName || user.email,
-          userId: user.uid,
-          userName: user.displayName || user.email,
-          timestamp: serverTimestamp(),
+            scrollToBottom();
+            
+            // Clear input
+            inputElement.value = "";
+            
+            // Show AI is typing
+            const typingIndicator = `
+                <div class="flex justify-start mb-4">
+                    <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                        <div>
+                            <div class="text-xs text-gray-500 ml-2 mb-1">AI Assistant</div>
+                            <div class="flex items-end">
+                                <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg mr-2 rounded-bl-none">
+                                    <p class="text-sm"><i class="fas fa-circle-notch fa-spin"></i> Thinking...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += typingIndicator;
+            scrollToBottom();
+            
+            try {
+                // Get AI response
+                const aiResponse = await getAIResponse(input);
+                
+                // Remove typing indicator
+                container.removeChild(container.lastChild);
+                
+                // Add AI response to UI
+                const aiMessageHTML = `
+                    <div class="flex justify-start mb-4">
+                        <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                            <div>
+                                <div class="text-xs text-gray-500 ml-2 mb-1">AI Assistant</div>
+                                <div class="flex items-end">
+                                    <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg mr-2 rounded-bl-none">
+                                        <p class="text-sm">${aiResponse.text}</p>
+                                    </div>
+                                    <div class="text-xs text-gray-500 whitespace-nowrap">${new Date().toLocaleTimeString()}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += aiMessageHTML;
+                scrollToBottom();
+                
+                // Set up explanation slides if available
+                if (aiResponse.slides && aiResponse.slides.length > 0) {
+                    currentExplanationSlides = aiResponse.slides;
+                    currentSlideIndex = 0;
+                    renderExplanationSlides();
+                }
+                
+                // Save to Firestore if signed in
+                if (userId) {
+                    const messageData = {
+                        text: input,
+                        userId: userId,
+                        userName: user.displayName || user.email,
+                        timestamp: serverTimestamp(),
+                    };
+                    
+                    await addDoc(collection(db, getCollectionPath()), messageData);
+                    
+                    const aiMessageData = {
+                        text: aiResponse.text,
+                        userId: 'ai',
+                        userName: 'AI Assistant',
+                        timestamp: serverTimestamp(),
+                    };
+                    
+                    await addDoc(collection(db, getCollectionPath()), aiMessageData);
+                }
+            } catch (e) {
+                console.error("Error getting AI response: ", e);
+                
+                // Remove typing indicator
+                container.removeChild(container.lastChild);
+                
+                // Show error message
+                const errorHTML = `
+                    <div class="flex justify-start mb-4">
+                        <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                            <div>
+                                <div class="text-xs text-gray-500 ml-2 mb-1">AI Assistant</div>
+                                <div class="flex items-end">
+                                    <div class="bg-red-100 text-red-800 px-4 py-2 rounded-lg mr-2 rounded-bl-none">
+                                        <p class="text-sm">Sorry, I encountered an error. Please try again.</p>
+                                    </div>
+                                    <div class="text-xs text-gray-500 whitespace-nowrap">${new Date().toLocaleTimeString()}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += errorHTML;
+                scrollToBottom();
+            }
         };
-        
-        try {
-          // Show sending state
-          const sendButton = document.getElementById("send-button");
-          sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-          sendButton.disabled = true;
-          
-          await addDoc(collection(db, getCollectionPath()), userMessage);
-          inputElement.value = "";
-        } catch (e) {
-          console.error("Error adding document: ", e);
-          document.getElementById("status").innerHTML = `
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              <strong>Error sending message:</strong> Please try again
-            </div>
-          `;
-        } finally {
-          // Reset send button
-          const sendButton = document.getElementById("send-button");
-          sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
-          sendButton.disabled = false;
-        }
-      };
 
-      // Handle Enter key in message input
-      document.getElementById("message-input").addEventListener("keypress", function(e) {
-        if (e.key === "Enter") {
-          handleSendMessage();
-        }
-      });
+        // Handle image upload
+        const handleImageUpload = (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                // In a real implementation, you would upload this to storage
+                // and then send the URL as part of your message
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // For demo purposes, we'll just show a success message
+                    document.getElementById("status").innerHTML = `
+                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                            Image uploaded successfully! You can now reference it in your question.
+                        </div>
+                    `;
+                    
+                    // You would typically send this image to your AI service here
+                };
+                reader.readAsDataURL(file);
+            }
+        };
 
-      window.signInWithGoogle = signInWithGoogle;
-      window.signOutUser = signOutUser;
-      window.handleSendMessage = handleSendMessage;
+        // Toggle settings menu
+        const toggleSettingsMenu = () => {
+            const menu = document.getElementById("settings-menu");
+            menu.classList.toggle('hidden');
+        };
+
+        // Handle Enter key in message input
+        document.getElementById("message-input").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                handleSendMessage();
+            }
+        });
+
+        window.signInWithGoogle = signInWithGoogle;
+        window.signOutUser = signOutUser;
+        window.handleSendMessage = handleSendMessage;
+        window.nextSlide = nextSlide;
+        window.prevSlide = prevSlide;
+        window.toggleSettingsMenu = toggleSettingsMenu;
     </script>
     <style>
-      #messages-container {
-        scroll-behavior: smooth;
-      }
-      /* Custom scrollbar */
-      #messages-container::-webkit-scrollbar {
-        width: 6px;
-      }
-      #messages-container::-webkit-scrollbar-track {
-        background: #f1f1f1;
-      }
-      #messages-container::-webkit-scrollbar-thumb {
-        background: #c5c5c5;
-        border-radius: 3px;
-      }
-      #messages-container::-webkit-scrollbar-thumb:hover {
-        background: #a8a8a8;
-      }
+        #messages-container {
+            scroll-behavior: smooth;
+        }
+        /* Custom scrollbar */
+        #messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        #messages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        #messages-container::-webkit-scrollbar-thumb {
+            background: #c5c5c5;
+            border-radius: 3px;
+        }
+        #messages-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        .slide-transition {
+            transition: opacity 0.3s ease;
+        }
     </style>
-  </head>
-  <body class="flex flex-col h-screen bg-gray-100">
+</head>
+<body class="flex flex-col h-screen bg-gray-100">
     <header class="flex items-center justify-between p-4 bg-white shadow-md">
-      <div class="flex items-center space-x-2">
-        <div class="bg-blue-500 text-white p-2 rounded-lg">
-          <i class="fas fa-comments"></i>
+        <div class="flex items-center space-x-2">
+            <button onclick="toggleSettingsMenu()" class="p-2 rounded-lg hover:bg-gray-100">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            <h1 class="text-xl font-bold text-gray-800">AL-ATAOA EDUCATIONAL AI</h1>
         </div>
-        <h1 class="text-2xl font-bold text-gray-800">Al-Atatoa.Ai Chat</h1>
-      </div>
-      
-      <div class="flex items-center space-x-4">
-        <div class="text-sm text-gray-500 hidden md:block">
-          Signed in as: <span id="user-id" class="font-medium">Not signed in</span>
+        
+        <div class="flex items-center space-x-4">
+            <div class="text-sm text-gray-500 hidden md:block">
+                Signed in as: <span id="user-id" class="font-medium">Not signed in</span>
+            </div>
+            <div id="user-avatar">
+                <i class="fas fa-user-circle text-3xl text-gray-400"></i>
+            </div>
+            <div>
+                <button id="signin-button" onclick="signInWithGoogle()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
+                    <i class="fab fa-google"></i> Sign in with Google
+                </button>
+                <button id="signout-button" onclick="signOutUser()" class="hidden px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition">
+                    <i class="fas fa-sign-out-alt"></i> Sign out
+                </button>
+            </div>
         </div>
-        <div id="user-avatar">
-          <i class="fas fa-user-circle text-3xl text-gray-400"></i>
-        </div>
-        <div>
-          <button id="signin-button" onclick="signInWithGoogle()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
-            <i class="fab fa-google"></i> Sign in with Google
-          </button>
-          <button id="signout-button" onclick="signOutUser()" class="hidden px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition">
-            <i class="fas fa-sign-out-alt"></i> Sign out
-          </button>
-        </div>
-      </div>
     </header>
+
+    <!-- Settings Menu -->
+    <div id="settings-menu" class="hidden absolute left-4 top-16 bg-white shadow-lg rounded-lg p-4 z-10 w-64">
+        <h3 class="font-bold text-lg mb-2">Settings & History</h3>
+        <ul class="space-y-2">
+            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-cog mr-2"></i> Settings</a></li>
+            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-history mr-2"></i> Chat History</a></li>
+            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-book mr-2"></i> Learning Resources</a></li>
+            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-question-circle mr-2"></i> Help</a></li>
+        </ul>
+    </div>
 
     <div id="status" class="p-2"></div>
 
     <div id="messages-container" class="flex-1 overflow-y-auto p-4 md:p-6"></div>
 
-    <div class="p-4 bg-white border-t border-gray-200">
-      <div class="flex space-x-2">
-        <input
-          id="message-input"
-          type="text"
-          disabled
-          class="flex-1 p-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-          placeholder="Sign in to type a message..."
-        />
-        <button
-          id="send-button"
-          onclick="handleSendMessage()"
-          disabled
-          class="p-3 rounded-full text-white transition-all transform hover:scale-105 shadow-md bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 disabled:hover:scale-100"
-        >
-          <i class="fas fa-paper-plane"></i>
-        </button>
-      </div>
+    <!-- Explanation Slides -->
+    <div id="explanation-slides" class="hidden bg-white border-t border-gray-200 p-4">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold">Explanation</h3>
+            <span id="slide-counter" class="text-sm text-gray-500">1/4</span>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg mb-3">
+            <p id="slide-content" class="text-gray-800"></p>
+        </div>
+        <div class="flex justify-between">
+            <button id="prev-slide" onclick="prevSlide()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg disabled:opacity-50">
+                <i class="fas fa-arrow-left mr-2"></i> Back
+            </button>
+            <button id="next-slide" onclick="nextSlide()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50">
+                Next <i class="fas fa-arrow-right ml-2"></i>
+            </button>
+        </div>
     </div>
-  </body>
+
+    <div class="p-4 bg-white border-t border-gray-200">
+        <div class="flex space-x-2">
+            <div class="flex items-center">
+                <input type="file" id="image-upload" accept="image/*" class="hidden" />
+                <label for="image-upload" class="p-3 rounded-full text-gray-600 hover:text-blue-500 cursor-pointer">
+                    <i class="fas fa-image"></i>
+                </label>
+                <label for="camera-input" class="p-3 rounded-full text-gray-600 hover:text-blue-500 cursor-pointer">
+                    <i class="fas fa-camera"></i>
+                </label>
+                <input type="file" id="camera-input" accept="image/*" capture="camera" class="hidden" />
+            </div>
+            <input
+                id="message-input"
+                type="text"
+                class="flex-1 p-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                placeholder="Type your question (no sign-in required)..."
+            />
+            <button
+                id="send-button"
+                onclick="handleSendMessage()"
+                class="p-3 rounded-full text-white transition-all transform hover:scale-105 shadow-md bg-blue-500 hover:bg-blue-600"
+            >
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Add event listeners for image uploads
+        document.getElementById('image-upload').addEventListener('change', handleImageUpload);
+        document.getElementById('camera-input').addEventListener('change', handleImageUpload);
+    </script>
+</body>
 </html>
