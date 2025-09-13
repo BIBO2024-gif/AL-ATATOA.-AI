@@ -3,486 +3,9 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="google-site-verification" content="BbEEMitRl-Ro-nAvZY_kVH8IDI-3xFvepscILKkmhnA" />
     <title>AL-ATAOA EDUCATIONAL AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import {
-            getAuth,
-            GoogleAuthProvider,
-            signInWithPopup,
-            signOut,
-            onAuthStateChanged,
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {
-            getFirestore,
-            collection,
-            addDoc,
-            serverTimestamp,
-            query,
-            orderBy,
-            onSnapshot,
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase config
-        const firebaseConfig = {
-            apiKey: "AIzaSyAijPqA0FfQ59CxD236qkouuoP3Sj3eObw",
-            authDomain: "al-atola.firebaseapp.com",
-            projectId: "al-atola",
-            storageBucket: "al-atola.appspot.com",
-            messagingSenderId: "62678831820",
-            appId: "1:62678831820:web:359fb1175905483c596869",
-            measurementId: "G-8D5F4X80FQ",
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-
-        let userId = null;
-        let currentSlideIndex = 0;
-        let currentExplanationSlides = [];
-
-        // Sign in with Google
-        async function signInWithGoogle() {
-            try {
-                const button = document.getElementById("signin-button");
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
-                button.disabled = true;
-                
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                console.error(error);
-                document.getElementById("status").innerHTML = `
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                        <strong>Sign-in failed:</strong> ${error.message}
-                    </div>
-                `;
-                
-                const button = document.getElementById("signin-button");
-                button.innerHTML = '<i class="fab fa-google"></i> Sign in with Google';
-                button.disabled = false;
-            }
-        }
-
-        // Sign out
-        async function signOutUser() {
-            try {
-                const button = document.getElementById("signout-button");
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing out...';
-                button.disabled = true;
-                
-                await signOut(auth);
-            } catch (error) {
-                console.error(error);
-                document.getElementById("status").innerHTML = `
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                        <strong>Sign-out error:</strong> ${error.message}
-                    </div>
-                `;
-                
-                const button = document.getElementById("signout-button");
-                button.innerHTML = '<i class="fas fa-sign-out-alt"></i> Sign out';
-                button.disabled = false;
-            }
-        }
-
-        // Auth state listener
-        onAuthStateChanged(auth, (user) => {
-            const signinBtn = document.getElementById("signin-button");
-            const signoutBtn = document.getElementById("signout-button");
-            const messageInput = document.getElementById("message-input");
-            const sendButton = document.getElementById("send-button");
-            
-            if (user) {
-                userId = user.uid;
-                document.getElementById("user-id").textContent = user.displayName || user.email;
-                document.getElementById("status").innerHTML = `
-                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-                        <p>✅ Signed in as: <strong>${user.displayName}</strong> (${user.email})</p>
-                    </div>
-                `;
-                document.getElementById("user-avatar").innerHTML = `
-                    <img src="${user.photoURL}" class="rounded-full w-10 h-10 border shadow" />
-                `;
-                
-                // Show signout, hide signin
-                signinBtn.classList.add('hidden');
-                signoutBtn.classList.remove('hidden');
-                
-                // Enable message input
-                messageInput.disabled = false;
-                messageInput.placeholder = "Type your message...";
-                sendButton.disabled = false;
-                
-                attachFirestoreListener();
-            } else {
-                userId = null;
-                document.getElementById("user-id").textContent = "Not signed in";
-                document.getElementById("status").innerHTML = `
-                    <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
-                        <p>🚪 You are signed out. Sign in to save your chat history.</p>
-                    </div>
-                `;
-                document.getElementById("user-avatar").innerHTML = `
-                    <i class="fas fa-user-circle text-3xl text-gray-400"></i>
-                `;
-                
-                // Show signin, hide signout
-                signinBtn.classList.remove('hidden');
-                signoutBtn.classList.add('hidden');
-                
-                // Enable message input even when not signed in
-                messageInput.disabled = false;
-                messageInput.placeholder = "Type your question (no sign-in required)...";
-                sendButton.disabled = false;
-                
-                // Don't clear messages - allow guest usage
-                // Just don't attach Firestore listener for guests
-            }
-        });
-
-        // Firestore chat setup
-        const getCollectionPath = () => "chat_rooms/public/messages";
-
-        const attachFirestoreListener = () => {
-            const q = query(
-                collection(db, getCollectionPath()),
-                orderBy("timestamp")
-            );
-            onSnapshot(q, (querySnapshot) => {
-                const messages = [];
-                querySnapshot.forEach((doc) => {
-                    messages.push({ id: doc.id, ...doc.data() });
-                });
-                renderMessages(messages);
-                scrollToBottom();
-            }, (error) => {
-                console.error("Firestore error:", error);
-                document.getElementById("status").innerHTML = `
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                        <strong>Connection error:</strong> Could not load messages
-                    </div>
-                `;
-            });
-        };
-
-        // AI Response Simulation (Replace with actual API integration)
-        async function getAIResponse(userMessage) {
-            // This is a simulation - replace with actual API call
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    // Simple educational responses based on keywords
-                    const lowerMessage = userMessage.toLowerCase();
-                    
-                    if (lowerMessage.includes("math") || lowerMessage.includes("calculate")) {
-                        resolve({
-                            text: "Mathematics is the study of numbers, shapes, and patterns. Would you like me to explain a specific concept like algebra, geometry, or calculus?",
-                            slides: [
-                                "Mathematics is the science of structure, order, and relation.",
-                                "It evolved from counting, calculation, measurement, and the study of shapes.",
-                                "There are many areas of math including arithmetic, algebra, geometry, and calculus.",
-                                "Math helps us understand patterns and solve problems in many fields."
-                            ]
-                        });
-                    } else if (lowerMessage.includes("science") || lowerMessage.includes("physics") || lowerMessage.includes("chemistry")) {
-                        resolve({
-                            text: "Science is the pursuit and application of knowledge about the natural world. Would you like to learn about a specific branch like physics, chemistry, or biology?",
-                            slides: [
-                                "Science is a systematic enterprise that builds knowledge in the form of testable explanations.",
-                                "The major branches of science are natural sciences, social sciences, and formal sciences.",
-                                "The scientific method involves observation, hypothesis, experimentation, and conclusion.",
-                                "Science has transformed our understanding of the universe and improved our quality of life."
-                            ]
-                        });
-                    } else if (lowerMessage.includes("history") || lowerMessage.includes("historical")) {
-                        resolve({
-                            text: "History is the study of past events, particularly in human affairs. Is there a specific era or event you're interested in?",
-                            slides: [
-                                "History is the study of the past as it is described in written documents.",
-                                "We study history to understand change and how the society we live in came to be.",
-                                "Historians use sources like documents, artifacts, and oral traditions.",
-                                "Understanding history helps us avoid repeating past mistakes."
-                            ]
-                        });
-                    } else {
-                        resolve({
-                            text: "I'm an educational AI designed to help with learning. You can ask me about math, science, history, or any other academic subject!",
-                            slides: [
-                                "I'm here to help you learn!",
-                                "You can ask me questions about various subjects.",
-                                "I'll provide explanations in simple steps.",
-                                "Use the next and back buttons to navigate through explanations."
-                            ]
-                        });
-                    }
-                }, 1000); // Simulate API delay
-            });
-        }
-
-        const renderMessages = (messages) => {
-            const container = document.getElementById("messages-container");
-            container.innerHTML = "";
-            
-            if (messages.length === 0) {
-                container.innerHTML = `
-                    <div class="flex justify-center items-center h-full text-gray-500 italic">
-                        No messages yet. Ask me anything!
-                    </div>
-                `;
-            } else {
-                messages.forEach((message) => {
-                    const isUser = message.userId === userId;
-                    const messageClass = isUser ? "justify-end" : "justify-start";
-                    const messageBg = isUser
-                        ? "bg-blue-500 text-white rounded-br-none"
-                        : "bg-gray-100 text-gray-800 rounded-bl-none";
-                    const senderText = isUser ? "You" : `${message.userName || "AI Assistant"}`;
-                    const time = message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '';
-
-                    const messageHTML = `
-                        <div class="flex ${messageClass} mb-4">
-                            <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
-                                <div class="${isUser ? 'order-2' : ''}">
-                                    ${!isUser ? `
-                                        <div class="text-xs text-gray-500 ml-2 mb-1">${senderText}</div>
-                                    ` : ''}
-                                    <div class="flex ${isUser ? 'flex-row-reverse' : ''} items-end">
-                                        <div class="${messageBg} px-4 py-2 rounded-lg ${isUser ? 'ml-2' : 'mr-2'}">
-                                            <p class="text-sm">${message.text}</p>
-                                        </div>
-                                        <div class="text-xs text-gray-500 whitespace-nowrap">${time}</div>
-                                    </div>
-                                    ${isUser ? `
-                                        <div class="text-xs text-gray-500 mr-2 mt-1 text-right">${senderText}</div>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    container.innerHTML += messageHTML;
-                });
-            }
-        };
-
-        const renderExplanationSlides = () => {
-            const slidesContainer = document.getElementById("explanation-slides");
-            const slideContent = document.getElementById("slide-content");
-            const slideCounter = document.getElementById("slide-counter");
-            
-            if (currentExplanationSlides.length === 0) {
-                slidesContainer.classList.add('hidden');
-                return;
-            }
-            
-            slidesContainer.classList.remove('hidden');
-            slideContent.textContent = currentExplanationSlides[currentSlideIndex];
-            slideCounter.textContent = `${currentSlideIndex + 1}/${currentExplanationSlides.length}`;
-            
-            // Update button states
-            document.getElementById("prev-slide").disabled = currentSlideIndex === 0;
-            document.getElementById("next-slide").disabled = currentSlideIndex === currentExplanationSlides.length - 1;
-        };
-
-        const nextSlide = () => {
-            if (currentSlideIndex < currentExplanationSlides.length - 1) {
-                currentSlideIndex++;
-                renderExplanationSlides();
-            }
-        };
-
-        const prevSlide = () => {
-            if (currentSlideIndex > 0) {
-                currentSlideIndex--;
-                renderExplanationSlides();
-            }
-        };
-
-        const scrollToBottom = () => {
-            const container = document.getElementById("messages-container");
-            container.scrollTop = container.scrollHeight;
-        };
-
-        const handleSendMessage = async () => {
-            const inputElement = document.getElementById("message-input");
-            const input = inputElement.value.trim();
-            if (input === "") return;
-
-            // Add user message to UI immediately
-            const user = auth.currentUser;
-            const tempMessage = {
-                text: input,
-                userId: userId || 'guest',
-                userName: user ? user.displayName || user.email : 'Guest',
-                timestamp: new Date(),
-            };
-            
-            // Show user message immediately
-            const container = document.getElementById("messages-container");
-            const messageHTML = `
-                <div class="flex justify-end mb-4">
-                    <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
-                        <div class="order-2">
-                            <div class="flex flex-row-reverse items-end">
-                                <div class="bg-blue-500 text-white px-4 py-2 rounded-lg ml-2 rounded-br-none">
-                                    <p class="text-sm">${input}</p>
-                                </div>
-                                <div class="text-xs text-gray-500 whitespace-nowrap">${new Date().toLocaleTimeString()}</div>
-                            </div>
-                            <div class="text-xs text-gray-500 mr-2 mt-1 text-right">${user ? 'You' : 'Guest'}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.innerHTML += messageHTML;
-            scrollToBottom();
-            
-            // Clear input
-            inputElement.value = "";
-            
-            // Show AI is typing
-            const typingIndicator = `
-                <div class="flex justify-start mb-4">
-                    <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
-                        <div>
-                            <div class="text-xs text-gray-500 ml-2 mb-1">AI Assistant</div>
-                            <div class="flex items-end">
-                                <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg mr-2 rounded-bl-none">
-                                    <p class="text-sm"><i class="fas fa-circle-notch fa-spin"></i> Thinking...</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.innerHTML += typingIndicator;
-            scrollToBottom();
-            
-            try {
-                // Get AI response
-                const aiResponse = await getAIResponse(input);
-                
-                // Remove typing indicator
-                container.removeChild(container.lastChild);
-                
-                // Add AI response to UI
-                const aiMessageHTML = `
-                    <div class="flex justify-start mb-4">
-                        <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
-                            <div>
-                                <div class="text-xs text-gray-500 ml-2 mb-1">AI Assistant</div>
-                                <div class="flex items-end">
-                                    <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg mr-2 rounded-bl-none">
-                                        <p class="text-sm">${aiResponse.text}</p>
-                                    </div>
-                                    <div class="text-xs text-gray-500 whitespace-nowrap">${new Date().toLocaleTimeString()}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                container.innerHTML += aiMessageHTML;
-                scrollToBottom();
-                
-                // Set up explanation slides if available
-                if (aiResponse.slides && aiResponse.slides.length > 0) {
-                    currentExplanationSlides = aiResponse.slides;
-                    currentSlideIndex = 0;
-                    renderExplanationSlides();
-                }
-                
-                // Save to Firestore if signed in
-                if (userId) {
-                    const messageData = {
-                        text: input,
-                        userId: userId,
-                        userName: user.displayName || user.email,
-                        timestamp: serverTimestamp(),
-                    };
-                    
-                    await addDoc(collection(db, getCollectionPath()), messageData);
-                    
-                    const aiMessageData = {
-                        text: aiResponse.text,
-                        userId: 'ai',
-                        userName: 'AI Assistant',
-                        timestamp: serverTimestamp(),
-                    };
-                    
-                    await addDoc(collection(db, getCollectionPath()), aiMessageData);
-                }
-            } catch (e) {
-                console.error("Error getting AI response: ", e);
-                
-                // Remove typing indicator
-                container.removeChild(container.lastChild);
-                
-                // Show error message
-                const errorHTML = `
-                    <div class="flex justify-start mb-4">
-                        <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
-                            <div>
-                                <div class="text-xs text-gray-500 ml-2 mb-1">AI Assistant</div>
-                                <div class="flex items-end">
-                                    <div class="bg-red-100 text-red-800 px-4 py-2 rounded-lg mr-2 rounded-bl-none">
-                                        <p class="text-sm">Sorry, I encountered an error. Please try again.</p>
-                                    </div>
-                                    <div class="text-xs text-gray-500 whitespace-nowrap">${new Date().toLocaleTimeString()}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                container.innerHTML += errorHTML;
-                scrollToBottom();
-            }
-        };
-
-        // Handle image upload
-        const handleImageUpload = (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                // In a real implementation, you would upload this to storage
-                // and then send the URL as part of your message
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    // For demo purposes, we'll just show a success message
-                    document.getElementById("status").innerHTML = `
-                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-                            Image uploaded successfully! You can now reference it in your question.
-                        </div>
-                    `;
-                    
-                    // You would typically send this image to your AI service here
-                };
-                reader.readAsDataURL(file);
-            }
-        };
-
-        // Toggle settings menu
-        const toggleSettingsMenu = () => {
-            const menu = document.getElementById("settings-menu");
-            menu.classList.toggle('hidden');
-        };
-
-        // Handle Enter key in message input
-        document.getElementById("message-input").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") {
-                handleSendMessage();
-            }
-        });
-
-        window.signInWithGoogle = signInWithGoogle;
-        window.signOutUser = signOutUser;
-        window.handleSendMessage = handleSendMessage;
-        window.nextSlide = nextSlide;
-        window.prevSlide = prevSlide;
-        window.toggleSettingsMenu = toggleSettingsMenu;
-    </script>
     <style>
         #messages-container {
             scroll-behavior: smooth;
@@ -501,8 +24,31 @@
         #messages-container::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
-        .slide-transition {
-            transition: opacity 0.3s ease;
+        .slide-content h3 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .slide-content ol, .slide-content ul {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        /* Animation for new messages */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message-item {
+            animation: fadeIn 0.3s ease-in;
+        }
+        /* Loading animation */
+        .loader {
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -534,61 +80,79 @@
     </header>
 
     <!-- Settings Menu -->
-    <div id="settings-menu" class="hidden absolute left-4 top-16 bg-white shadow-lg rounded-lg p-4 z-10 w-64">
-        <h3 class="font-bold text-lg mb-2">Settings & History</h3>
-        <ul class="space-y-2">
-            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-cog mr-2"></i> Settings</a></li>
-            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-history mr-2"></i> Chat History</a></li>
-            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-book mr-2"></i> Learning Resources</a></li>
-            <li><a href="#" class="text-blue-500 hover:text-blue-700"><i class="fas fa-question-circle mr-2"></i> Help</a></li>
-        </ul>
+    <div id="settings-menu" class="hidden absolute left-4 top-16 bg-white shadow-lg rounded-lg z-10 w-64">
+        <div class="p-4 border-b border-gray-200">
+            <h3 class="font-semibold text-gray-700">Settings & History</h3>
+        </div>
+        <div class="p-2">
+            <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                <i class="fas fa-cog mr-2"></i> Account Settings
+            </a>
+            <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                <i class="fas fa-history mr-2"></i> Chat History
+            </a>
+            <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                <i class="fas fa-book mr-2"></i> Learning Resources
+            </a>
+            <a href="#" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                <i class="fas fa-question-circle mr-2"></i> Help & Support
+            </a>
+        </div>
     </div>
 
     <div id="status" class="p-2"></div>
 
-    <div id="messages-container" class="flex-1 overflow-y-auto p-4 md:p-6"></div>
+    <div id="messages-container" class="flex-1 overflow-y-auto p-4 md:p-6">
+        <div class="flex justify-center items-center h-full text-gray-500 italic">
+            Sign in or continue as guest to start chatting
+        </div>
+    </div>
 
-    <!-- Explanation Slides -->
-    <div id="explanation-slides" class="hidden bg-white border-t border-gray-200 p-4">
-        <div class="flex items-center justify-between mb-2">
-            <h3 class="font-bold">Explanation</h3>
-            <span id="slide-counter" class="text-sm text-gray-500">1/4</span>
-        </div>
-        <div class="bg-gray-50 p-4 rounded-lg mb-3">
-            <p id="slide-content" class="text-gray-800"></p>
-        </div>
-        <div class="flex justify-between">
-            <button id="prev-slide" onclick="prevSlide()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg disabled:opacity-50">
-                <i class="fas fa-arrow-left mr-2"></i> Back
-            </button>
-            <button id="next-slide" onclick="nextSlide()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50">
-                Next <i class="fas fa-arrow-right ml-2"></i>
-            </button>
+    <!-- Modal for Text Input -->
+    <div id="text-check-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-lg w-full">
+            <h2 class="text-xl font-bold mb-4">Paste Text to Check</h2>
+            <textarea id="check-textarea" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" rows="10" placeholder="Paste your essay, paragraph, or sentence here..."></textarea>
+            <div class="mt-4 flex justify-end space-x-2">
+                <button onclick="document.getElementById('text-check-modal').classList.add('hidden')" class="px-4 py-2 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300">
+                    Cancel
+                </button>
+                <button onclick="submitCheckText()" class="px-4 py-2 rounded-lg text-white bg-blue-500 hover:bg-blue-600">
+                    Check
+                </button>
+            </div>
         </div>
     </div>
 
     <div class="p-4 bg-white border-t border-gray-200">
+        <div class="flex items-center space-x-2 mb-2">
+            <button onclick="handleImageUpload()" class="p-2 text-gray-500 hover:text-blue-500 rounded-full hover:bg-gray-100" title="Upload image">
+                <i class="fas fa-image"></i>
+            </button>
+            <button onclick="handleCameraCapture()" class="p-2 text-gray-500 hover:text-blue-500 rounded-full hover:bg-gray-100" title="Take photo">
+                <i class="fas fa-camera"></i>
+            </button>
+            <button onclick="handleCheckMarks()" class="p-2 text-gray-500 hover:text-blue-500 rounded-full hover:bg-gray-100" title="Add check marks">
+                <i class="fas fa-check-double"></i>
+            </button>
+            <div class="flex-1"></div>
+            <button onclick="continueAsGuest()" class="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded-lg">
+                Continue as Guest
+            </button>
+        </div>
         <div class="flex space-x-2">
-            <div class="flex items-center">
-                <input type="file" id="image-upload" accept="image/*" class="hidden" />
-                <label for="image-upload" class="p-3 rounded-full text-gray-600 hover:text-blue-500 cursor-pointer">
-                    <i class="fas fa-image"></i>
-                </label>
-                <label for="camera-input" class="p-3 rounded-full text-gray-600 hover:text-blue-500 cursor-pointer">
-                    <i class="fas fa-camera"></i>
-                </label>
-                <input type="file" id="camera-input" accept="image/*" capture="camera" class="hidden" />
-            </div>
             <input
                 id="message-input"
                 type="text"
+                disabled
                 class="flex-1 p-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                placeholder="Type your question (no sign-in required)..."
+                placeholder="Sign in or continue as guest to type a message..."
             />
             <button
                 id="send-button"
                 onclick="handleSendMessage()"
-                class="p-3 rounded-full text-white transition-all transform hover:scale-105 shadow-md bg-blue-500 hover:bg-blue-600"
+                disabled
+                class="p-3 rounded-full text-white transition-all transform hover:scale-105 shadow-md bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 disabled:hover:scale-100"
             >
                 <i class="fas fa-paper-plane"></i>
             </button>
@@ -596,9 +160,519 @@
     </div>
 
     <script>
-        // Add event listeners for image uploads
-        document.getElementById('image-upload').addEventListener('change', handleImageUpload);
-        document.getElementById('camera-input').addEventListener('change', handleImageUpload);
+        // Simulated Firebase functionality (since we can't use real Firebase in this environment)
+        let userId = null;
+        let currentSlideIndex = 0;
+        let slidesData = [];
+        let isGuestMode = false;
+        let currentConversationId = null;
+        let messages = [];
+
+        // Sign in with Google simulation
+        async function signInWithGoogle() {
+            try {
+                const button = document.getElementById("signin-button");
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
+                button.disabled = true;
+                
+                // Simulate Google sign-in process
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                userId = "user_" + Math.random().toString(36).substr(2, 9);
+                currentConversationId = "conversation_" + Date.now();
+                
+                document.getElementById("user-id").textContent = "Google User";
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                        <p>✅ Signed in as: <strong>Google User</strong> (user@example.com)</p>
+                    </div>
+                `;
+                document.getElementById("user-avatar").innerHTML = `
+                    <img src="https://lh3.googleusercontent.com/a/ACg8ocKzQ2g3mU4NdfrXgQn-ZG3nZiZs4Xh6JqpqJQ=w36-h36-p-rp-mo-br100" class="rounded-full w-10 h-10 border shadow" />
+                `;
+                
+                // Show signout, hide signin
+                document.getElementById("signin-button").classList.add('hidden');
+                document.getElementById("signout-button").classList.remove('hidden');
+                
+                // Enable message input
+                document.getElementById("message-input").disabled = false;
+                document.getElementById("send-button").disabled = false;
+                
+                // Clear messages
+                document.getElementById("messages-container").innerHTML = `
+                    <div class="flex justify-center items-center h-full text-gray-500 italic">
+                        No messages yet. Start the conversation!
+                    </div>
+                `;
+            } catch (error) {
+                console.error(error);
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <strong>Sign-in failed:</strong> Please try again
+                    </div>
+                `;
+                
+                const button = document.getElementById("signin-button");
+                button.innerHTML = '<i class="fab fa-google"></i> Sign in with Google';
+                button.disabled = false;
+            }
+        }
+
+        // Continue as guest
+        function continueAsGuest() {
+            isGuestMode = true;
+            userId = "guest_" + Math.random().toString(36).substr(2, 9);
+            currentConversationId = "conversation_" + Date.now();
+            
+            document.getElementById("user-id").textContent = "Guest User";
+            document.getElementById("status").innerHTML = `
+                <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
+                    <p>👋 Continuing as guest. Some features may be limited.</p>
+                </div>
+            `;
+            document.getElementById("user-avatar").innerHTML = `
+                <i class="fas fa-user-circle text-3xl text-gray-400"></i>
+            `;
+            
+            // Show signout (which will sign out of guest mode), hide signin
+            document.getElementById("signin-button").classList.add('hidden');
+            document.getElementById("signout-button").classList.remove('hidden');
+            
+            // Enable message input
+            document.getElementById("message-input").disabled = false;
+            document.getElementById("send-button").disabled = false;
+            
+            // Clear messages
+            document.getElementById("messages-container").innerHTML = `
+                <div class="flex justify-center items-center h-full text-gray-500 italic">
+                    No messages yet. Start the conversation!
+                </div>
+            `;
+        }
+
+        // Sign out
+        async function signOutUser() {
+            if (isGuestMode) {
+                // Reset guest mode
+                isGuestMode = false;
+                userId = null;
+                currentConversationId = null;
+                
+                document.getElementById("user-id").textContent = "Not signed in";
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
+                        <p>🚪 You are signed out. Sign in to access all features.</p>
+                    </div>
+                `;
+                document.getElementById("user-avatar").innerHTML = `
+                    <i class="fas fa-user-circle text-3xl text-gray-400"></i>
+                `;
+                
+                // Show signin, hide signout
+                document.getElementById("signin-button").classList.remove('hidden');
+                document.getElementById("signout-button").classList.add('hidden');
+                
+                // Disable message input
+                document.getElementById("message-input").disabled = true;
+                document.getElementById("send-button").disabled = true;
+                
+                // Clear messages
+                document.getElementById("messages-container").innerHTML = `
+                    <div class="flex justify-center items-center h-full text-gray-500 italic">
+                        Sign in or continue as guest to start chatting
+                    </div>
+                `;
+                
+                return;
+            }
+            
+            try {
+                const button = document.getElementById("signout-button");
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing out...';
+                button.disabled = true;
+                
+                // Simulate sign-out process
+                await new Promise(resolve => setTimeout(resolve, 800));
+                
+                userId = null;
+                currentConversationId = null;
+                
+                document.getElementById("user-id").textContent = "Not signed in";
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
+                        <p>🚪 You are signed out. Sign in or continue as guest.</p>
+                    </div>
+                `;
+                document.getElementById("user-avatar").innerHTML = `
+                    <i class="fas fa-user-circle text-3xl text-gray-400"></i>
+                `;
+                
+                // Show signin, hide signout
+                document.getElementById("signin-button").classList.remove('hidden');
+                document.getElementById("signout-button").classList.add('hidden');
+                
+                // Disable message input
+                document.getElementById("message-input").disabled = true;
+                document.getElementById("send-button").disabled = true;
+                
+                // Clear messages
+                document.getElementById("messages-container").innerHTML = `
+                    <div class="flex justify-center items-center h-full text-gray-500 italic">
+                        Sign in or continue as guest to start chatting
+                    </div>
+                `;
+            } catch (error) {
+                console.error(error);
+                document.getElementById("status").innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <strong>Sign-out error:</strong> Please try again
+                    </div>
+                `;
+                
+                const button = document.getElementById("signout-button");
+                button.innerHTML = '<i class="fas fa-sign-out-alt"></i> Sign out';
+                button.disabled = false;
+            }
+        }
+
+        // Slide navigation functions
+        function nextSlide() {
+            if (currentSlideIndex < slidesData.length - 1) {
+                currentSlideIndex++;
+                updateSlideDisplay();
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlideIndex > 0) {
+                currentSlideIndex--;
+                updateSlideDisplay();
+            }
+        }
+
+        function updateSlideDisplay() {
+            document.getElementById('slide-content').innerHTML = slidesData[currentSlideIndex].content;
+            document.getElementById('slide-counter').textContent = `Slide ${currentSlideIndex + 1} of ${slidesData.length}`;
+        }
+
+        const scrollToBottom = () => {
+            const container = document.getElementById("messages-container");
+            container.scrollTop = container.scrollHeight;
+        };
+
+        // Complete the getAIResponse function
+        async function getAIResponse(userMessage) {
+            // Show loading indicator
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'flex justify-start mb-4';
+            loadingIndicator.innerHTML = `
+                <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                    <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg rounded-bl-none">
+                        <div class="flex items-center">
+                            <div class="loader ease-linear rounded-full border-2 border-t-2 border-gray-200 h-4 w-4 mr-2"></div>
+                            <p class="text-sm">AL-ATAOA AI is thinking...</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById("messages-container").appendChild(loadingIndicator);
+            scrollToBottom();
+            
+            // Simulate API call delay
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            // Remove loading indicator
+            loadingIndicator.remove();
+            
+            const lowerMessage = userMessage.toLowerCase();
+            let responseText = "";
+
+            // Check if this is an essay checking request
+            if (lowerMessage.includes("check my essay") || lowerMessage.includes("review my writing") || 
+                lowerMessage.includes("grade my essay")) {
+                responseText = "I'll be happy to check your essay! Please paste your essay text and I'll provide feedback on grammar, structure, and content.";
+            } else if (lowerMessage.includes("what is") || lowerMessage.includes("explain") || lowerMessage.includes("tell me about")) {
+                const topic = userMessage.split(/what is|explain|tell me about/i)[1]?.trim() || "a general topic";
+                responseText = `Here is a breakdown of *${topic}* in a series of slides.`;
+                slidesData = generateSlidesForTopic(topic);
+                if (slidesData.length > 0) {
+                     const messagesContainer = document.getElementById("messages-container");
+                     // Add the slide container
+                     const slideContainer = document.createElement('div');
+                     slideContainer.innerHTML = `
+                         <div class="flex-grow w-full md:max-w-3xl mx-auto my-4 p-6 bg-white rounded-lg shadow-lg">
+                             <div id="slide-content" class="slide-content mb-4 text-gray-800"></div>
+                             <div class="flex justify-between items-center text-sm font-semibold text-gray-600">
+                                 <button onclick="prevSlide()" class="p-2 rounded-full hover:bg-gray-100">
+                                     <i class="fas fa-chevron-left"></i> Previous
+                                 </button>
+                                 <span id="slide-counter"></span>
+                                 <button onclick="nextSlide()" class="p-2 rounded-full hover:bg-gray-100">
+                                     Next <i class="fas fa-chevron-right"></i>
+                                 </button>
+                             </div>
+                         </div>
+                     `;
+                     messagesContainer.appendChild(slideContainer);
+                     currentSlideIndex = 0;
+                     updateSlideDisplay();
+                }
+            } else if (lowerMessage.includes("hello") || lowerMessage.includes("hi")) {
+                responseText = "Hello there! How can I help you with your studies today?";
+            } else if (lowerMessage.includes("who are you")) {
+                responseText = "I am AL-ATAOA Educational AI, designed to help you with your learning needs. I can answer questions, provide explanations, and help with your writing.";
+            } else if (lowerMessage.includes("how to") || lowerMessage.includes("how do i")) {
+                const task = userMessage.split(/how to|how do i/i)[1]?.trim() || "a task";
+                responseText = `I can guide you on *how to ${task}*. The process involves several steps that I can walk you through. Let's start with the first step.`;
+            } else if (lowerMessage.includes("thank you") || lowerMessage.includes("thanks")) {
+                responseText = "You're very welcome! Is there anything else I can assist you with?";
+            } else {
+                responseText = `I understand you're asking about "${userMessage}". This is an interesting topic that I can explain in detail. Would you like me to provide a quick summary or a more detailed breakdown?`;
+            }
+
+            // Display the AI's response
+            displayMessage(responseText, 'ai');
+        }
+
+        // Function to create and display a new message element
+        function displayMessage(text, sender) {
+            const messagesContainer = document.getElementById("messages-container");
+            const isUser = sender === 'user';
+            const messageElement = document.createElement('div');
+            messageElement.className = `flex mb-4 ${isUser ? 'justify-end' : 'justify-start'} message-item`;
+            
+            let messageContent = `
+                <div class="max-w-xs lg:max-w-md xl:max-w-lg ${isUser ? 'bg-blue-500 text-white rounded-lg rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-lg rounded-bl-none'} px-4 py-2">
+                    <p class="text-sm break-words">${formatText(text)}</p>
+                </div>
+            `;
+
+            // If it's an AI message, add the avatar
+            if (!isUser) {
+                messageContent = `<div class="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 mr-2 flex items-center justify-center">
+                                    <i class="fas fa-robot text-gray-500"></i>
+                                </div>
+                                <div>
+                                    ${messageContent}
+                                </div>
+                `;
+            }
+
+            messageElement.innerHTML = messageContent;
+            messagesContainer.appendChild(messageElement);
+
+            // Hide the initial empty state message
+            const emptyState = messagesContainer.querySelector('.h-full.italic');
+            if (emptyState) {
+                messagesContainer.removeChild(emptyState);
+            }
+            scrollToBottom();
+        }
+
+        // Function to handle markdown and newlines
+        function formatText(text) {
+            // Replace newlines with <br>
+            let formattedText = text.replace(/\n/g, '<br>');
+            // Bold markdown **text**
+            formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            // Italic markdown *text*
+            formattedText = formattedText.replace(/\*(.*?)\*/g, '<i>$1</i>');
+            return formattedText;
+        }
+
+        // Handle sending a message
+        async function handleSendMessage() {
+            const inputElement = document.getElementById("message-input");
+            const userMessage = inputElement.value.trim();
+
+            if (userMessage) {
+                displayMessage(userMessage, 'user');
+                inputElement.value = ''; // Clear input
+                await getAIResponse(userMessage);
+            }
+        }
+
+        // Add event listener for Enter key
+        document.getElementById("message-input").addEventListener("keypress", (event) => {
+            if (event.key === "Enter") {
+                handleSendMessage();
+            }
+        });
+
+        // Toggle settings menu
+        function toggleSettingsMenu() {
+            const menu = document.getElementById("settings-menu");
+            menu.classList.toggle('hidden');
+        }
+
+        // Function to open the text check modal
+        function handleCheckMarks() {
+            document.getElementById("check-textarea").value = "";
+            document.getElementById("text-check-modal").classList.remove('hidden');
+        }
+        
+        // Function to copy text to the clipboard
+        function copyToClipboard(elementId) {
+            const textToCopy = document.getElementById(elementId).innerText;
+            const tempInput = document.createElement("textarea");
+            tempInput.value = textToCopy;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            const statusDiv = document.getElementById("status");
+            statusDiv.innerHTML = `
+                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                    <strong>Copied!</strong> The corrected text has been copied to your clipboard.
+                </div>
+            `;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+        }
+
+        // Function to handle the text submission from the modal
+        async function submitCheckText() {
+            const textarea = document.getElementById("check-textarea");
+            const text = textarea.value.trim();
+            if (text) {
+                document.getElementById('text-check-modal').classList.add('hidden');
+                displayMessage(`I've submitted the following text for review:\n\n*${text.substring(0, 100)}...*`, 'user');
+
+                const loadingIndicator = document.createElement('div');
+                loadingIndicator.className = 'flex justify-start mb-4';
+                loadingIndicator.innerHTML = `
+                    <div class="flex max-w-xs lg:max-w-md xl:max-w-lg">
+                        <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg rounded-bl-none">
+                            <div class="flex items-center">
+                                <div class="loader ease-linear rounded-full border-2 border-t-2 border-gray-200 h-4 w-4 mr-2"></div>
+                                <p class="text-sm">AL-ATAOA AI is checking your text...</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById("messages-container").appendChild(loadingIndicator);
+                scrollToBottom();
+                
+                // Simulate AI processing delay
+                await new Promise(resolve => setTimeout(resolve, 2500));
+                
+                loadingIndicator.remove();
+                
+                const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
+                let feedbackText = "";
+                let correctedText = "";
+
+                if (wordCount < 10) {
+                    feedbackText = "This is a great start! For such a short phrase, it is grammatically correct. Keep up the good work!";
+                    correctedText = text;
+                } else if (wordCount >= 10 && wordCount < 50) {
+                    feedbackText = `Your text is well-structured and easy to read.
+                    \n**Suggestions:**
+                    \n* Check for clarity and flow. Make sure each sentence connects smoothly to the next.
+                    \n* Review your word choices. Are there stronger verbs or more descriptive adjectives you could use?
+                    \n* Consider a final read-through to catch any spelling errors.`;
+                    
+                    // Simple simulated correction
+                    correctedText = text.trim();
+                    if (correctedText.length > 0) {
+                        correctedText = correctedText.charAt(0).toUpperCase() + correctedText.slice(1);
+                        if (!correctedText.endsWith('.')) {
+                            correctedText += '.';
+                        }
+                    }
+                } else {
+                    feedbackText = `This is a fantastic draft! You have a strong thesis and well-developed ideas.
+                    \n**Feedback:**
+                    \n* Your introduction is compelling. Consider restating your main argument in a fresh way in the conclusion.
+                    \n* Some sentences could be combined or rephrased for better flow and impact.
+                    \n* A final proofread for punctuation and grammar would polish this piece perfectly.`;
+                    
+                    // Simple simulated correction
+                    correctedText = "Here is a suggested revision for clarity and flow:\n\n" + text;
+                }
+                
+                // Construct the full AI response with feedback and corrected text
+                const fullResponse = `${feedbackText}<br><br><b>AI Correction:</b><br><div id="corrected-text" class="relative mt-2 p-3 bg-gray-200 text-gray-800 rounded-lg">
+                    ${correctedText}
+                    <button onclick="copyToClipboard('corrected-text')" class="absolute top-2 right-2 p-1 text-gray-500 hover:text-blue-500 rounded-full hover:bg-gray-300">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>`;
+
+                displayMessage(fullResponse, 'ai');
+
+            } else {
+                document.getElementById('text-check-modal').classList.add('hidden');
+            }
+        }
+
+
+        // Placeholder for image upload
+        function handleImageUpload() {
+            const statusDiv = document.getElementById("status");
+            statusDiv.innerHTML = `
+                <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
+                    <strong>Feature coming soon:</strong> Image upload is not yet implemented.
+                </div>
+            `;
+        }
+
+        // Placeholder for camera capture
+        function handleCameraCapture() {
+            const statusDiv = document.getElementById("status");
+            statusDiv.innerHTML = `
+                <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
+                    <strong>Feature coming soon:</strong> Camera capture is not yet implemented.
+                </div>
+            `;
+        }
+
+        // Generate placeholder slides for a given topic
+        function generateSlidesForTopic(topic) {
+            const capitalizedTopic = topic.charAt(0).toUpperCase() + topic.slice(1);
+            return [
+                {
+                    content: `
+                        <h3>Introduction to ${capitalizedTopic}</h3>
+                        <p>Welcome to our educational breakdown of **${capitalizedTopic}**! In this presentation, we'll explore the core concepts, history, and key applications of this fascinating subject.</p>
+                        <p>This is a foundational topic for many areas of study and understanding it is crucial for a strong academic foundation.</p>
+                    `
+                },
+                {
+                    content: `
+                        <h3>Key Principles</h3>
+                        <p>At its heart, ${capitalizedTopic} is governed by a few fundamental principles:</p>
+                        <ol class="list-decimal list-outside">
+                            <li>**Principle 1:** The primary rule that drives the topic.</li>
+                            <li>**Principle 2:** A secondary factor that influences its behavior.</li>
+                            <li>**Principle 3:** An overarching concept that brings everything together.</li>
+                        </ol>
+                        <p>Mastering these principles will help you grasp more complex ideas later on.</p>
+                    `
+                },
+                {
+                    content: `
+                        <h3>Practical Applications</h3>
+                        <p>Where do we see ${capitalizedTopic} in the real world?</p>
+                        <ul class="list-disc list-outside">
+                            <li>*In technology:* Used in the development of modern systems.</li>
+                            <li>*In science:* Essential for research and discovery.</li>
+                            <li>*In everyday life:* You might even see it in simple, common actions!</li>
+                        </ul>
+                        <p>Understanding these applications can make the topic more relatable and interesting.</p>
+                    `
+                },
+                {
+                    content: `
+                        <h3>Summary & Further Learning</h3>
+                        <p>To summarize, **${capitalizedTopic}** is a complex but rewarding topic built on several key principles. For further learning, I recommend exploring related subjects and reading academic papers on the topic.</p>
+                        <p>Feel free to ask more specific questions about **${capitalizedTopic}**!</p>
+                    `
+                }
+            ];
+        }
     </script>
 </body>
 </html>
